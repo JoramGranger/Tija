@@ -1,100 +1,63 @@
-export interface QuizQuestion {
-  question: string
-  options: string[]
-  correctAnswer: string
-  topic: string
-}
+import { QuizQuestion } from "./ai-service";
 
-// Mock questions generator - in a real app, these would come from an API
-export function generateMockQuestions(topics: string[], difficulty: string): QuizQuestion[] {
-  const questions: QuizQuestion[] = []
+// Function to fetch questions from our API
+export async function fetchQuizQuestions(
+  topics: string[],
+  difficulty: string,
+  numQuestions: number = 10
+): Promise<QuizQuestion[]> {
+  try {
+    const response = await fetch("/api/quiz", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        topics,
+        difficulty,
+        numQuestions,
+      }),
+    });
 
-  // Generate 2 questions per topic
-  topics.forEach((topic) => {
-    const topicQuestions = getMockQuestionsForTopic(topic, difficulty)
-    questions.push(...topicQuestions)
-  })
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to fetch quiz questions");
+    }
 
-  // Limit to 10 questions max
-  return questions.slice(0, 10)
-}
-
-function getMockQuestionsForTopic(topic: string, difficulty: string): QuizQuestion[] {
-  // This is just mock data - in a real app, we would fetch from an API
-  const mockQuestions: Record<string, QuizQuestion[]> = {
-    Science: [
-      {
-        question: "What is the chemical symbol for gold?",
-        options: ["Au", "Ag", "Fe", "Cu"],
-        correctAnswer: "Au",
-        topic: "Science",
-      },
-      {
-        question: "Which planet is known as the Red Planet?",
-        options: ["Venus", "Mars", "Jupiter", "Saturn"],
-        correctAnswer: "Mars",
-        topic: "Science",
-      },
-    ],
-    History: [
-      {
-        question: "In which year did World War II end?",
-        options: ["1943", "1944", "1945", "1946"],
-        correctAnswer: "1945",
-        topic: "History",
-      },
-      {
-        question: "Who was the first President of the United States?",
-        options: ["Thomas Jefferson", "John Adams", "George Washington", "Benjamin Franklin"],
-        correctAnswer: "George Washington",
-        topic: "History",
-      },
-    ],
-    Geography: [
-      {
-        question: "What is the capital of Australia?",
-        options: ["Sydney", "Melbourne", "Canberra", "Perth"],
-        correctAnswer: "Canberra",
-        topic: "Geography",
-      },
-      {
-        question: "Which is the longest river in the world?",
-        options: ["Amazon", "Nile", "Mississippi", "Yangtze"],
-        correctAnswer: "Nile",
-        topic: "Geography",
-      },
-    ],
-    Movies: [
-      {
-        question: "Who directed the movie 'Inception'?",
-        options: ["Steven Spielberg", "Christopher Nolan", "James Cameron", "Quentin Tarantino"],
-        correctAnswer: "Christopher Nolan",
-        topic: "Movies",
-      },
-      {
-        question: "Which movie won the Best Picture Oscar in 2020?",
-        options: ["1917", "Joker", "Parasite", "Once Upon a Time in Hollywood"],
-        correctAnswer: "Parasite",
-        topic: "Movies",
-      },
-    ],
-    Music: [
-      {
-        question: "Who is known as the 'King of Pop'?",
-        options: ["Elvis Presley", "Michael Jackson", "Prince", "David Bowie"],
-        correctAnswer: "Michael Jackson",
-        topic: "Music",
-      },
-      {
-        question: "Which band performed the song 'Bohemian Rhapsody'?",
-        options: ["The Beatles", "Led Zeppelin", "Queen", "The Rolling Stones"],
-        correctAnswer: "Queen",
-        topic: "Music",
-      },
-    ],
+    const data = await response.json();
+    return data.questions;
+  } catch (error) {
+    console.error("Error fetching quiz questions:", error);
+    // Fallback to mock questions if the API fails
+    return generateMockQuestions(topics, difficulty);
   }
-
-  // Default to Science if topic not found
-  return mockQuestions[topic] || mockQuestions["Science"]
 }
 
+// Keep the mock question generator as a fallback
+export function generateMockQuestions(
+  topics: string[],
+  difficulty: string
+): QuizQuestion[] {
+  const questions: QuizQuestion[] = [];
+  
+  // Generate 10 mock questions
+  for (let i = 0; i < 10; i++) {
+    const topic = topics[i % topics.length];
+    
+    const question: QuizQuestion = {
+      question: `Mock question ${i + 1} about ${topic}?`,
+      options: [
+        `Answer option A for question ${i + 1}`,
+        `Answer option B for question ${i + 1}`,
+        `Answer option C for question ${i + 1}`,
+        `Answer option D for question ${i + 1}`,
+      ],
+      correctAnswer: `Answer option ${["A", "B", "C", "D"][i % 4]} for question ${i + 1}`,
+      topic,
+    };
+    
+    questions.push(question);
+  }
+  
+  return questions;
+}

@@ -8,7 +8,7 @@ import Confetti from "react-confetti"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { useSound } from "@/hooks/use-sound"
-import { type QuizQuestion, generateMockQuestions } from "@/lib/quiz-utils"
+import { type QuizQuestion, fetchQuizQuestions } from "@/lib/quiz-utils"
 import { useWindowSize } from "@/hooks/use-window-size"
 import { ScoreDisplay } from "./score-display"
 import { GameBackground } from "./game-background"
@@ -47,16 +47,39 @@ export default function QuizGame() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [scoreAnimation, setScoreAnimation] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Initialize quiz
+  // Initialize quiz - now using AI-generated questions
   useEffect(() => {
-    // In a real app, we would fetch questions from an API
-    const mockQuestions = generateMockQuestions(mode === "single" ? [topic] : topics, difficulty)
-
-    setTimeout(() => {
-      setQuestions(mockQuestions)
-      setIsLoading(false)
-    }, 1500)
+    const loadQuizQuestions = async () => {
+      try {
+        setIsLoading(true)
+        
+        // Determine which topics to use
+        const topicsToUse = mode === "single" ? [topic] : topics
+        
+        // Fetch questions from the API
+        const fetchedQuestions = await fetchQuizQuestions(
+          topicsToUse, 
+          difficulty,
+          10 // Number of questions
+        )
+        
+        if (fetchedQuestions.length === 0) {
+          throw new Error("No questions could be generated. Please try a different topic.")
+        }
+        
+        setQuestions(fetchedQuestions)
+        setError(null)
+      } catch (err) {
+        console.error("Error loading questions:", err)
+        setError(err instanceof Error ? err.message : "Failed to load questions")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    loadQuizQuestions()
   }, [mode, difficulty, topic, topics])
 
   // Timer logic
@@ -138,13 +161,34 @@ export default function QuizGame() {
     router.push("/")
   }
 
+  // Error state
+  if (error) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 relative overflow-hidden">
+        <GameBackground />
+        <div className="bg-card/80 backdrop-blur-sm rounded-xl p-6 shadow-lg max-w-md w-full">
+          <h2 className="text-2xl font-bold text-red-500 mb-4">Error</h2>
+          <p className="mb-6">{error}</p>
+          <Button 
+            onClick={handleRestart}
+            className="w-full h-12"
+          >
+            <Home className="mr-2 h-5 w-5" />
+            Back to Home
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   // Loading state
   if (isLoading) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center p-4 relative overflow-hidden">
         <GameBackground />
         <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-        <p className="mt-4 text-lg">Loading your quiz...</p>
+        <p className="mt-4 text-lg">Generating your AI quiz...</p>
+        <p className="mt-2 text-sm text-muted-foreground">This may take a moment</p>
       </div>
     )
   }
@@ -216,6 +260,26 @@ export default function QuizGame() {
             </Button>
           </div>
         </motion.div>
+      </div>
+    )
+  }
+
+  // No questions available
+  if (questions.length === 0) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 relative overflow-hidden">
+        <GameBackground />
+        <div className="bg-card/80 backdrop-blur-sm rounded-xl p-6 shadow-lg max-w-md w-full">
+          <h2 className="text-2xl font-bold mb-4">No Questions Available</h2>
+          <p className="mb-6">We couldn't generate questions for this topic. Please try a different topic.</p>
+          <Button 
+            onClick={handleRestart}
+            className="w-full h-12"
+          >
+            <Home className="mr-2 h-5 w-5" />
+            Back to Home
+          </Button>
+        </div>
       </div>
     )
   }
@@ -378,4 +442,3 @@ export default function QuizGame() {
     </div>
   )
 }
-
