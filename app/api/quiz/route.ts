@@ -16,12 +16,23 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { topic, difficulty, numQuestions = 10 } = body;
+    const { topics, difficulty, numQuestions = 10 } = body;
 
     // Validate request parameters
-    if (!topic || typeof topic !== 'string') {
+    if (!topics) {
       return NextResponse.json(
-        { error: "Topic must be provided as a string" },
+        { error: "Topics must be provided" },
+        { status: 400 }
+      );
+    }
+
+    // Handle both single string and array formats
+    const topicsArray = Array.isArray(topics) ? topics : [topics];
+    
+    // Validate that all topics are strings
+    if (topicsArray.some(t => typeof t !== 'string')) {
+      return NextResponse.json(
+        { error: "All topics must be strings" },
         { status: 400 }
       );
     }
@@ -36,12 +47,12 @@ export async function POST(request: NextRequest) {
     // Generate AI questions
     const questions = await generateQuizQuestions(
       GOOGLE_AI_API_KEY,
-      topic,
+      topicsArray,
       difficulty,
       numQuestions
     );
     
-    console.log(`Successfully generated ${questions.length} AI questions about ${topic}`);
+    console.log(`Successfully generated ${questions.length} AI questions about ${topicsArray.join(', ')}`);
 
     // Return the questions
     return NextResponse.json({ questions });

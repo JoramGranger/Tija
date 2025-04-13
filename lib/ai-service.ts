@@ -14,21 +14,28 @@ export interface QuizQuestion {
  */
 export async function generateQuizQuestions(
   apiKey: string,
-  topic: string,
+  topics: string | string[],  // Accept either a single string or an array of strings
   difficulty: string,
   numQuestions: number = 10
 ): Promise<QuizQuestion[]> {
   try {
+    // Convert to array if it's a single string
+    const topicsArray = Array.isArray(topics) ? topics : [topics];
+    // Use the first topic for generation or join them if needed
+    const topicForPrompt = topicsArray.length === 1 
+      ? topicsArray[0] 
+      : topicsArray.join(", ");
+    
     // Initialize the Google Generative AI with your API key
     const ai = new GoogleGenAI({ apiKey: GOOGLE_AI_API_KEY });
     
-    const prompt = `Generate ${numQuestions} trivia questions about ${topic} with ${difficulty} difficulty. 
+    const prompt = `Generate ${numQuestions} trivia questions about ${topicForPrompt} with ${difficulty} difficulty. 
     
     For each question:
     1. Create a question
     2. Provide exactly 4 possible answers with one being correct
     3. Clearly mark the correct answer
-    4. Mention the topic it relates to
+    4. Mention the specific topic it relates to
     
     Return the content in JSON format with this structure:
     [
@@ -36,17 +43,19 @@ export async function generateQuizQuestions(
         "question": "Question text here?",
         "options": ["Option A", "Option B", "Option C", "Option D"],
         "correctAnswer": "The correct option text exactly as in options",
-        "topic": "${topic}"
+        "topic": "Specific topic from: ${topicsArray.join(", ")}"
       },
       ...more questions
     ]
     
     Make sure that:
+    - IMPORTANT: Return ONLY valid JSON, no other text or explanations
     - Questions are challenging but fair for ${difficulty} difficulty
     - The correct answer is always included in the options array
     - Options are plausible but only one is correct
     - Question text ends with a question mark
-    - No options contain the words "correct" or "incorrect"`;
+    - No options contain the words "correct" or "incorrect"
+    - Distribute questions evenly across all topics if multiple are provided`;
 
     // Generate content using the SDK
     const response = await ai.models.generateContent({
@@ -65,17 +74,44 @@ export async function generateQuizQuestions(
       throw new Error("AI response text is undefined");
     }
     
-    // Extract JSON from the response
-    const jsonMatch = text.match(/\[\s*\{.*\}\s*\]/s);
-    if (!jsonMatch) {
-      throw new Error("Could not parse JSON from AI response");
+    // Improved JSON parsing logic
+    let questions;
+    
+    try {
+      // First try parsing the whole response directly
+      questions = JSON.parse(text) as QuizQuestion[];
+    } catch (e) {
+      // If direct parsing fails, try extracting JSON with regex
+      const jsonMatch = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (!jsonMatch) {
+        console.error("Failed to extract JSON. Raw response:", text);
+        throw new Error("Could not parse JSON from AI response");
+      }
+      
+      try {
+        questions = JSON.parse(jsonMatch[0]) as QuizQuestion[];
+      } catch (e2) {
+        console.error("Failed to parse extracted JSON:", jsonMatch[0]);
+        throw new Error("Could not parse extracted JSON from AI response");
+      }
     }
     
-    const jsonText = jsonMatch[0];
-    const questions = JSON.parse(jsonText) as QuizQuestion[];
+    // Ensure we have an array
+    if (!Array.isArray(questions)) {
+      console.error("Parsed result is not an array:", questions);
+      throw new Error("AI response is not a valid question array");
+    }
     
     // Validate questions
-    return questions.map(q => validateQuestion(q)).filter(Boolean) as QuizQuestion[];
+    const validatedQuestions = questions
+      .map(q => validateQuestion(q, topicsArray))
+      .filter(Boolean) as QuizQuestion[];
+    
+    if (validatedQuestions.length === 0) {
+      throw new Error("No valid questions found in AI response");
+    }
+    
+    return validatedQuestions;
   } catch (error) {
     console.error("Error generating questions:", error);
     throw error;
@@ -85,7 +121,7 @@ export async function generateQuizQuestions(
 /**
  * Validate a question to ensure it has the required format
  */
-function validateQuestion(question: QuizQuestion): QuizQuestion | null {
+function validateQuestion(question: QuizQuestion, validTopics: string[]): QuizQuestion | null {
   // Check if question has required fields
   if (!question.question || !question.options || !question.correctAnswer || !question.topic) {
     console.warn("Invalid question format", question);
@@ -102,6 +138,14 @@ function validateQuestion(question: QuizQuestion): QuizQuestion | null {
   if (!question.options.includes(question.correctAnswer)) {
     console.warn("Correct answer not found in options", question);
     return null;
+  }
+  
+  // If multiple topics were provided, verify that the topic is valid
+  if (validTopics.length > 1 && !validTopics.some(t => 
+      question.topic.toLowerCase().includes(t.toLowerCase()))) {
+    console.warn("Question topic doesn't match any of the requested topics", question);
+    // Fix it by assigning one of the valid topics
+    question.topic = validTopics[Math.floor(Math.random() * validTopics.length)];
   }
   
   return question;

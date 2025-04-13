@@ -2,7 +2,7 @@ import { QuizQuestion } from "./ai-service";
 
 // Function to fetch questions from our API
 export async function fetchQuizQuestions(
-  topics: string[],
+  topics: string[],  // Keep as array since that's how it's currently being used
   difficulty: string,
   numQuestions: number = 10
 ): Promise<QuizQuestion[]> {
@@ -13,7 +13,7 @@ export async function fetchQuizQuestions(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        topics,
+        topics,  // Send as 'topics' (plural) to match the updated API
         difficulty,
         numQuestions,
       }),
